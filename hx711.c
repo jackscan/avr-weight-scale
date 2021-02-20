@@ -5,7 +5,9 @@
 
 #include "hx711.h"
 
+#include <avr/interrupt.h>
 #include <avr/io.h>
+#include <avr/sleep.h>
 
 #include <util/delay.h>
 
@@ -17,6 +19,7 @@
 #define SERIAL_PIN          PINB
 #define PD_SCK              (1 << PB3)
 #define DOUT                (1 << PB4)
+#define DOUT_PCINT          (1 << PCINT4)
 #define MAX_PD_HIGH_TIME_US 50
 
 void hx711_init(void) {
@@ -32,6 +35,32 @@ void hx711_init(void) {
 void hx711_powerdown(void) {
     SERIAL_PORT |= PD_SCK;
     _delay_us(60);
+}
+
+ISR(PCINT0_vect) {
+    // required for wake up during sleep
+}
+
+static inline void wait_for_dout(void) {
+    // enable pin change interrupt on DOUT pin
+    PCMSK = DOUT_PCINT;
+    // enable pin change interrupt
+    GIMSK |= (1 << PCIE);
+
+    cli();
+    // wait for DOUT to go low
+    while ((SERIAL_PIN & DOUT) != 0) {
+        // sleep while waiting for measurement
+        set_sleep_mode(SLEEP_MODE_IDLE);
+        sleep_enable();
+        sei();
+        sleep_cpu();
+        sleep_disable();
+        cli();
+    };
+    sei();
+    // disable pin change interrupt
+    GIMSK &= ~(1 << PCIE);
 }
 
 static inline bool pdwatch_timeout(void) {
@@ -87,8 +116,7 @@ uint32_t hx711_read(void) {
     SERIAL_PORT &= ~PD_SCK;
 
     // wait for hx711 to become ready
-    while ((SERIAL_PIN & DOUT) != 0)
-        ;
+    wait_for_dout();
 
     _delay_us(0.1);
 
