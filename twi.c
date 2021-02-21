@@ -94,6 +94,8 @@ static struct {
         uint32_t sum;
         uint8_t count;
     } weight, last;
+    /// Flag whether to accumulate weight or overwrite.
+    bool accumulate;
 } twi = {};
 
 _Static_assert(sizeof(twi.buf) >= sizeof(calib_data),
@@ -151,22 +153,27 @@ int8_t twi_get_temperature(void) {
 
 void twi_add_weight(uint32_t w) {
     LOCKI();
-    uint32_t sum = twi.weight.sum + (uint32_t)w;
-    uint8_t n = twi.weight.count;
+    if (twi.accumulate) {
+        uint32_t sum = twi.weight.sum + (uint32_t)w;
+        uint8_t n = twi.weight.count;
 
-    // This should never happen.
-    // But just in case we squeeze previous data down.
-    if (n == 0xff) {
-        sum /= 2;
-        // NOTE: Old counter is odd.
-        // n / 2 + 1 == (n + 1) / 2
-        n /= 2;
+        // This should never happen.
+        // But just in case we squeeze previous data down.
+        if (n == 0xff) {
+            sum /= 2;
+            // NOTE: Old counter is odd.
+            // n / 2 + 1 == (n + 1) / 2
+            n /= 2;
+        }
+
+        ++n;
+
+        twi.weight.sum = sum;
+        twi.weight.count = n;
+    } else {
+        twi.weight.sum = w;
+        twi.weight.count = 1;
     }
-
-    ++n;
-
-    twi.weight.sum = sum;
-    twi.weight.count = n;
     UNLOCKI();
 }
 
@@ -286,6 +293,7 @@ static inline bool prepare_send(void) {
 static inline bool process_cmd(void) {
     twi.index = 0;
     switch (twi.cmd) {
+    case TWI_CMD_MEASURE_WEIGHT: twi.count = 1; break;
     case TWI_CMD_SET_TEMP: twi.count = 1; break;
     case TWI_CMD_SET_CALIB: twi.count = sizeof(calib_data); break;
     case TWI_CMD_SET_ADDR: twi.count = 1; break;
@@ -312,6 +320,10 @@ static inline bool push_byte(uint8_t byte) {
 
 static inline void store_data(void) {
     switch (twi.cmd) {
+    case TWI_CMD_MEASURE_WEIGHT:
+        twi.accumulate = twi.buf[0] != 0;
+        twi.task = twi.cmd;
+        break;
     case TWI_CMD_SET_TEMP:
         twi.temp = twi.buf[0];
         twi.task = twi.cmd;
