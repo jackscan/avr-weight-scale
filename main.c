@@ -120,9 +120,15 @@ static void measure_weight(int8_t temp) {
         uint8_t task = twi_get_task();
         if (task != TWI_CMD_MEASURE_WEIGHT && task != TWI_CMD_NONE)
             break;
-        uint32_t w = calculate_weight(hx711_read(), temp);
+        uint32_t raw = hx711_read();
         if (twi_check_busy())
             wdt_reset();
+        if (raw == HX711_INVALID) {
+            LOG("resetting HX711\n");
+            hx711_powerdown();
+            continue;
+        }
+        uint32_t w = calculate_weight(raw, temp);
         if (((w >> 22) & 0x3) != 0x3) {
             twi_add_weight(w);
             LOG("w: %lu\n", w);
