@@ -11,10 +11,24 @@ TARGET     = weight-scale
 
 AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE)
 COMPILE = avr-gcc -std=gnu99 -g -Wall -Wno-unused-function -Os $(DEFINES) \
-                  -mmcu=$(DEVICE) -Wl,-u,vfprintf -lprintf_min -fshort-enums
+                  -mmcu=$(DEVICE) -fshort-enums #-Wl,-u,vfprintf -lprintf_min
 OBJDUMP = avr-objdump
 
+GIT_TAG := $(shell git describe --tags --abbrev=0  --always)
+
 all: $(TARGET).hex
+
+version.h.tmp: FORCE
+	@echo "#ifndef GIT_HASH" > version.h.tmp
+	@echo "#define VERSION_MAJOR $(word 1,$(subst ., ,$(GIT_TAG)))" >> version.h.tmp
+	@echo "#define VERSION_MINOR $(word 2,$(subst ., ,$(GIT_TAG)))" >> version.h.tmp
+	@echo "#define VERSION_PATCH $(shell git log --oneline $(GIT_TAG)..HEAD| wc -l)" >> version.h.tmp
+	@echo '#define GIT_HASH 0x$(shell git rev-parse --short=4 --abbrev-commit HEAD)' >> version.h.tmp
+	@echo "#define GIT_DIRTY $(shell git diff --quiet; echo $$?)" >> version.h.tmp
+	@echo "#endif" >> version.h.tmp
+
+version.h: version.h.tmp
+	@diff $@ $< && rm $< || mv $< $@
 
 .c.o:
 	$(COMPILE) -c $< -o $@
@@ -55,4 +69,7 @@ cpp:
 %.lst: %.elf
 	$(OBJDUMP) -h -S $< > $@
 
-$(OBJECTS): nvm.h twi.h hx711.h util.h debug.h Makefile
+$(OBJECTS): nvm.h twi.h hx711.h util.h debug.h version.h Makefile
+
+.PHONY: FORCE
+FORCE:

@@ -32,6 +32,7 @@ enum {
     TWI_CMD_SET_ADDR = 0xA3,
     TWI_CMD_ADDR_WRITE = 0xA6,
     TWI_CMD_DISABLE_WD = 0xA9,
+    TWI_CMD_GET_VERSION = 0xE0,
     TWI_CMD_NONE = 0xFF,
 };
 

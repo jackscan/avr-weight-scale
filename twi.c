@@ -7,6 +7,7 @@
 
 #include "nvm.h"
 #include "util.h"
+#include "version.h"
 
 #include <avr/interrupt.h>
 #include <avr/io.h>
@@ -97,6 +98,20 @@ static struct {
     /// Flag whether to accumulate weight or overwrite.
     bool accumulate;
 } twi = {};
+
+#pragma pack(push, 1)
+static struct {
+    uint8_t major;
+    uint8_t minor;
+    uint8_t patch;
+    uint16_t hash;
+} version_info = {
+    .major = VERSION_MAJOR,
+    .minor = VERSION_MINOR,
+    .patch = GIT_DIRTY ? 0x80 | VERSION_PATCH : VERSION_PATCH,
+    .hash = GIT_HASH,
+};
+#pragma pack(pop)
 
 _Static_assert(sizeof(twi.buf) >= sizeof(calib_data),
                "Two wire interface buffer is too small");
@@ -254,6 +269,10 @@ static inline void twi_recv(void) {
 static inline bool prepare_send(void) {
     twi.index = 0;
     switch (twi.cmd) {
+    case TWI_CMD_GET_VERSION:
+        memcpy(twi.buf, &version_info, sizeof(version_info));
+        twi.count = sizeof(version_info);
+        break;
     case TWI_CMD_MEASURE_WEIGHT: {
         uint8_t n = twi.weight.count;
         if (n == 0) {
@@ -367,6 +386,7 @@ ISR(USI_OVF_vect) {
         }
 
         if (twi.state != TWI_CHECK_ADDR) {
+            // Set busy flag when address matches
             twi.busy = true;
         } else {
             twi_reset();
