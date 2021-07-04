@@ -106,8 +106,11 @@ static int8_t measure_temperature(void) {
 }
 
 static inline uint32_t calculate_weight(uint32_t result, int8_t temp) {
+    uint16_t s = calib_data.hx711.scale + calib_data.hx711.temp_scale * temp;
     result += calib_data.hx711.pre_offset;
-    result *= calib_data.hx711.scale + calib_data.hx711.temp_scale * temp;
+    uint32_t a = result * (s >> 8);
+    uint32_t b = result * (s & 0xff) / 256UL;
+    result = a + b;
     result += calib_data.hx711.post_offset;
     result /= 256UL;
     return result;
